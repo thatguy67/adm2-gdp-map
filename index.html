@@ -92,6 +92,7 @@
   });
 
   map.addControl(new maplibregl.NavigationControl(), "top-right");
+  window._map = map;
   map.addControl(new maplibregl.AttributionControl({
     compact: true,
     customAttribution: "GADM 4.1 · Kummu et al. 2025 (CC-BY-4.0)"
