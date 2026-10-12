@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World ADM-2 GDP Explorer</title>
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; font-family: system-ui, "Segoe UI", Roboto, sans-serif; }
+  #map { height: 100%; }
+  .panel {
+    position: absolute; z-index: 2; background: rgba(255,255,255,0.94);
+    border: 1px solid #C6D2DA; border-radius: 8px; padding: 10px 14px;
+    box-shadow: 0 2px 8px rgba(30,50,65,0.16); color: #22323F; max-width: 330px;
+  }
+  #titlebox { top: 12px; left: 12px; }
+  #titlebox h1 { margin: 0 0 4px; font-size: 17px; line-height: 1.25; }
+  #titlebox .sub { font-size: 12px; color: #5B6B77; }
+  #titlebox .foot { font-size: 10.5px; color: #7A8A96; margin-top: 6px; }
+  #legend { bottom: 34px; left: 12px; font-size: 11.5px; }
+  #legend h3 { margin: 0 0 6px; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; color: #5B6B77; }
+  #legend .row { display: flex; align-items: center; gap: 7px; margin: 3px 0; }
+  #legend .sw { width: 13px; height: 13px; border-radius: 3px; border: 1px solid #fff; box-shadow: 0 0 0 1px #CBD8E0; }
+  #legend .ct { margin-left: auto; color: #7A8A96; font-variant-numeric: tabular-nums; }
+  .maplibregl-popup-content { font-size: 12px; padding: 10px 12px; border-radius: 8px; }
+  .maplibregl-popup-content .src { color: #8A97A1; font-size: 10.5px; }
+  .maplibregl-popup-content .val { font-variant-numeric: tabular-nums; }
+  .maplibregl-popup-content .tag { background: #E9F0F5; color: #5B6B77; border-radius: 4px; padding: 0 5px; font-size: 10px; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="titlebox" class="panel">
+  <h1>World ADM-2 GDP Explorer</h1>
+  <div class="sub">48,009 second-level regions, shaded by GDP per capita (PPP, 2022). Hover a region for its economy.</div>
+  <div class="foot">Boundaries: GADM 4.1 (non-commercial use) · GDP: Kummu et al. 2025, <i>Scientific Data</i> (CC-BY-4.0). Compiled statistics where available, modelled estimates elsewhere.</div>
+</div>
+<div id="legend" class="panel">
+  <h3>GDP per capita (PPP, 2022)</h3>
+  <div class="row"><span class="sw" style="background:#ffffcc"></span>&lt; $2k <span class="ct">2,832</span></div>
+  <div class="row"><span class="sw" style="background:#ffeda0"></span>$2–5k <span class="ct">6,892</span></div>
+  <div class="row"><span class="sw" style="background:#fed976"></span>$5–10k <span class="ct">11,717</span></div>
+  <div class="row"><span class="sw" style="background:#feb24c"></span>$10–20k <span class="ct">11,124</span></div>
+  <div class="row"><span class="sw" style="background:#fd8d3c"></span>$20–40k <span class="ct">9,047</span></div>
+  <div class="row"><span class="sw" style="background:#f03b20"></span>$40–80k <span class="ct">5,401</span></div>
+  <div class="row"><span class="sw" style="background:#bd0026"></span>&gt; $80k <span class="ct">548</span></div>
+  <div class="row"><span class="sw" style="background:#c9cdd2"></span>no data <span class="ct">448</span></div>
+</div>
+
+<script src="vendor/pmtiles.js"></script>
+<script src="vendor/maplibre-gl.js"></script>
+<script>
+  const PC_LABEL = ["unavailable", "compiled statistic", "compiled (name match)", "modelled grid estimate"];
+  const TM_LABEL = ["zonal grid sum", "fractional small unit", "below grid resolution"];
+
+  const protocol = new pmtiles.Protocol();
+  maplibregl.addProtocol("pmtiles", protocol.tile);
+
+  const map = new maplibregl.Map({
+    container: "map",
+    style: {
+      version: 8,
+      sources: {
+        adm2: {
+          type: "vector",
+          url: "pmtiles://data/adm2.pmtiles"
+        }
+      },
+      layers: [
+        { id: "background", type: "background",
+          paint: { "background-color": "#E9F0F5" } },
+        { id: "adm2-fill", type: "fill", source: "adm2", "source-layer": "adm2",
+          paint: {
+            "fill-color": [
+              "case", ["<", ["get", "pc"], 0], "#c9cdd2",
+              ["step", ["get", "pc"],
+                "#ffffcc", 2000, "#ffeda0", 5000, "#fed976", 10000, "#feb24c",
+                20000, "#fd8d3c", 40000, "#f03b20", 80000, "#bd0026"]
+            ],
+            "fill-opacity": 0.95
+          }
+        },
+        { id: "adm2-line", type: "line", source: "adm2", "source-layer": "adm2",
+          paint: { "line-color": "rgba(255,255,255,0.8)", "line-width": 0.5 } }
+      ]
+    },
+    center: [0, 22],
+    zoom: 2.1,
+    minZoom: 1.5,
+    maxZoom: 12,
+    attributionControl: false
+  });
+
+  map.addControl(new maplibregl.NavigationControl(), "top-right");
+  map.addControl(new maplibregl.AttributionControl({
+    compact: true,
+    customAttribution: "GADM 4.1 · Kummu et al. 2025 (CC-BY-4.0)"
+  }));
+
+  function fmtTotal(musd) {
+    if (musd < 0) return "n/a";
+    if (musd === 0) return "< $0.5M (below grid resolution)";
+    return musd >= 1e6 ? "$" + (musd / 1e6).toFixed(2) + "T"
+         : "$" + (musd / 1e3).toFixed(1) + "B";
+  }
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g,
+    m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+
+  const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: true, maxWidth: "280px" });
+  map.on("mousemove", "adm2-fill", (e) => {
+    if (!e.features.length) return;
+    const p = e.features[0].properties;
+    map.getCanvas().style.cursor = "pointer";
+    const tag = p.lvl < 2 ? ' <span class="tag">ADM-' + p.lvl + "</span>" : "";
+    const pc = p.pc < 0 ? "unavailable" : "$" + Number(p.pc).toLocaleString();
+    popup.setLngLat(e.lngLat).setHTML(
+      "<b>" + esc(p.name) + "</b>" + tag + "<br>" +
+      esc(p.n1) + " · " + esc(p.iso) + "<br>" +
+      '<span class="val">Total: ' + fmtTotal(p.tot) + " · Per capita: " + pc + "</span><br>" +
+      '<span class="src">' + PC_LABEL[p.pcs] + (p.tm ? " · " + TM_LABEL[p.tm] : "") + "</span>"
+    ).addTo(map);
+  });
+  map.on("mouseleave", "adm2-fill", () => {
+    map.getCanvas().style.cursor = "";
+    popup.remove();
+  });
+</script>
+</body>
+</html>
